@@ -15,11 +15,25 @@ import java.util.NoSuchElementException;
 
  */
 @Slf4j
-public class MemberRepositoryV0 {
+public class MemberRepositoryV1 {
 
+
+    /*
+     V0 - 매번 사용 DB Driver Manager 를 활용해서 직접 Connection 을 가져온다
+     V1 - DataSource 를 통해 가져오면 Interface 화 되므로, 다른 DB 기술을 쓰더라도 바꿀 필요가 없다
+     */
+    private final DataSource dataSource;
+
+    // 의존성 주입을 위함
+    public MemberRepositoryV1(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
 
     private Connection getConnection() throws SQLException {
-        return DBConnectionUtil.getConnection(); // V0 였던 것
+//        return DBConnectionUtil.getConnection(); // V0 였던 것
+        Connection connFromDs = dataSource.getConnection();
+        log.info("getting connection from DataSource : connection = {}, class = {}", connFromDs, connFromDs.getClass());
+        return connFromDs;
     }
 
     /*
