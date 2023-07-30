@@ -5,7 +5,8 @@ import springdb.jdbc_study.repository.MemberRepositoryV1;
 
 /*
  이체하는 비즈니스 로직에서
- 트랜젝션을 자바 앱에서 사용해볼 수 있도록  Service 계층을 만든다
+ 트랜젝션을 자바 앱에서 사용해볼 수 있도록 Service 계층을 만든다
+ 트랜젝션이 적용되지 않은 V1 버전
  */
 public class MemberServiceV1 {
 

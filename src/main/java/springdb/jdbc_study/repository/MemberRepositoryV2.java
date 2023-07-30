@@ -2,7 +2,6 @@ package springdb.jdbc_study.repository;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.support.JdbcUtils;
-import springdb.jdbc_study.connection.DBConnectionUtil;
 import springdb.jdbc_study.domain.Member;
 
 import javax.sql.DataSource;
@@ -10,23 +9,24 @@ import java.sql.*;
 import java.util.NoSuchElementException;
 
 /*
- 한번쯤은 JDBC 를 직접 사용해보는 것도 좋은 경험이다
- ㅈㄴ 복잡.. 자원 할당 관리 이런것도 치명적으로 귀찮
- JDBC는 표준 인터페이스를 사용하더라도 처럼 모두 일관된 형식을 유지한다, SQL 과 PSTMT 에 PARAMS 를 설정하는 부분 빼고는 모두 동일
-
+ JDBC 의 Connection 을 PARAMETER 로 전달하면서 같은 Connection 보장해줄 수 있도록 만들어보자
+ MemberServiceV1 에서 findById, Update 함수를 쓰고 있으므로, 해당 함수들에 Connection 을 줄 수 있도록 PARAM 을 넣자
  */
 @Slf4j
-public class MemberRepositoryV1 {
+public class MemberRepositoryV2 {
 
 
     /*
-     V0 - 매번 사용 DB Driver Manager 를 활용해서 직접 Connection 을 가져온다
-     V1 - DataSource 를 통해 가져오면 Interface 화 되므로, 다른 DB 기술을 쓰더라도 바꿀 필요가 없다
+    V2 - 전달받은 Connection 을 사용해야 한다
+       - Transaction 보장을 위해 Repository 단에서 Connection 을 형성하면 안된다
+       - Connection 형성을 모두 주석 처리
+       - 단, Update 랑 findById 만 사용하므로, 나머지는 귀찮으므로 하지 않는다
+       - 컴파일 에러 방지를 위해 DataSource 는 여전히 넣어준다 ㅋ
      */
     private final DataSource dataSource;
 
     // 의존성 주입을 위함
-    public MemberRepositoryV1(DataSource dataSource) {
+    public MemberRepositoryV2(DataSource dataSource) {
         this.dataSource = dataSource;
     }
 
@@ -84,17 +84,17 @@ public class MemberRepositoryV1 {
      DB 콘솔에서 결과가 나온 row * col 표를 그대로 가지고 온거라고 생각하면 된다
      cursor 을 통해서 한 row 를 기준으로 읽어나간다
      */
-    public Member findById(String memberId) throws SQLException {
+    public Member findById(Connection con, String memberId) throws SQLException {
 
         String sql = "select * from member where member_id = ? ";
 
-        Connection con = null;
+//        Connection con = null;
         PreparedStatement pstmt = null;
         ResultSet rs = null;
 
         try {
 
-            con = getConnection();
+//            con = getConnection(); // 새로 연결하면 절대 안됨
             pstmt = con.prepareStatement(sql);
             pstmt.setString(1, memberId); // 첫번째 ? 에 string 값을 지정한다
 
@@ -105,15 +105,19 @@ public class MemberRepositoryV1 {
                 member.setMemberId(rs.getString("member_id"));
                 member.setMoney(rs.getInt("money"));
                 return member;
-            }else{
+            } else {
                 throw new NoSuchElementException("member not found memberId = " + memberId);
             }
 
         } catch (SQLException e) {
             log.error("db ERROR:: ", e);
             throw e;
-        }finally {
-            close(con, pstmt, rs);
+        } finally {
+            // con 도 닫아버리면 그 Connection 이 끝나버린다 (전달해줘야 하기 때문에 닫으면 안됨)
+            // 기존 close 함수를 이용할 수 없이, 직접 닫아야함
+            JdbcUtils.closeStatement(pstmt);
+            JdbcUtils.closeResultSet(rs);
+//            close(con, pstmt, rs);
         }
     }
 
@@ -121,17 +125,17 @@ public class MemberRepositoryV1 {
     /*
      수정과 삭제에 대해서도 추가해줄 수 있다.
      */
-    public void update(String memberId, int updateMoney) throws SQLException {
+    public void update(Connection con, String memberId, int updateMoney) throws SQLException {
 
         String sql = "update member set money = ? where member_id = ?";
 
         // JDBC 사용법
-        Connection con = null;
+//        Connection con = null;
         PreparedStatement pstmt = null;
 
         try {
 
-            con = getConnection();
+//            con = getConnection();
             pstmt = con.prepareStatement(sql);
 
             pstmt.setInt(1, updateMoney);
@@ -141,8 +145,9 @@ public class MemberRepositoryV1 {
         } catch (SQLException e) {
             log.info("DB ERROR :: ", e);
             throw e;
-        }finally {
-            close(con, pstmt, null);
+        } finally {
+            JdbcUtils.closeStatement(pstmt);
+//            close(con, pstmt, null); // 닫으면 안됨!
         }
     }
 
@@ -155,7 +160,7 @@ public class MemberRepositoryV1 {
         Connection con = null;
         PreparedStatement pstmt = null;
 
-        try{
+        try {
 
             con = getConnection();
             pstmt = con.prepareStatement(sql);
@@ -166,48 +171,17 @@ public class MemberRepositoryV1 {
         } catch (SQLException e) {
             log.info("DB ERROR :: ", e);
             throw e;
-        }finally {
+        } finally {
+
             close(con, pstmt, null);
+
         }
     }
 
-
-    // JDBC 기술을 사용해서 조금은 간편하게 Close
     private void close(Connection con , Statement stmt, ResultSet rs) {
         JdbcUtils.closeConnection(con);
         JdbcUtils.closeStatement(stmt);
         JdbcUtils.closeResultSet(rs);
     }
-
-    /*
-     RAW 한 close
-     */
-//    // 각각 닫히면서도 Exception 발생할 수 있기 때문에, 각각을 try/catch 해줘야 한다
-//    private void close(Connection conn, Statement stmt, ResultSet rs) {
-//
-//        if (stmt != null) {
-//            try {
-//                stmt.close();
-//            } catch (SQLException e) {
-//                log.info("error: ", e);
-//            }
-//        }
-//
-//        if (conn != null) {
-//            try {
-//                conn.close();
-//            } catch (SQLException e) {
-//                log.info("error: ", e);
-//            }
-//        }
-//
-//        if (rs != null) {
-//            try {
-//                rs.close();
-//            } catch (SQLException e) {
-//                log.info("error: ", e);
-//            }
-//        }
-//    }
 
 }
