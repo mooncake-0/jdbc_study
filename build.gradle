@@ -28,6 +28,7 @@ dependencies {
 	// 테스트에서도 롬복사용
 	testCompileOnly 'org.projectlombok:lombok'
 	testAnnotationProcessor 'org.projectlombok:lombok'
+	testImplementation 'com.h2database:h2'
 }
 
 tasks.named('test') {

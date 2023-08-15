@@ -4,24 +4,24 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.jdbc.support.JdbcUtils;
 import springdb.jdbc_study.domain.Member;
+import springdb.jdbc_study.repository.exception.MyDbException;
 
 import javax.sql.DataSource;
 import java.sql.*;
 import java.util.NoSuchElementException;
 
 /*
- 1) 트랜젝션 - 트랜젝션 매니저 사용
- 2) 트랜젝션 동기화 Lib 사용하기 위해
- > DatSourceUtils 에 들어가보면, TransactionSynchronizationManager 에서 Connection 을 조회하는 모습을 확인할 수 있음
- >DataSourceUtils.getConnection() 을 사용할 것
- >DataSourceUtils.releaseConnection() 을 사용할 것
+ 예외 누수 문제를 해결한 Repo
+ 체크 예외 --> Runtime 예외로 바꿀 거임
+ MemberRepository 인터페이스 사용
+ throws SQLException 이 제거될 것이다
  */
 @Slf4j
-public class MemberRepositoryV3 implements MemberRepositoryEx{
+public class MemberRepositoryV4_1 implements MemberRepository {
 
     private final DataSource dataSource;
 
-    public MemberRepositoryV3(DataSource dataSource) {
+    public MemberRepositoryV4_1(DataSource dataSource) {
         this.dataSource = dataSource;
     }
 
@@ -47,7 +47,8 @@ public class MemberRepositoryV3 implements MemberRepositoryEx{
     }
 
 
-    public Member save(Member member) throws SQLException {
+    @Override
+    public Member save(Member member) {
 
         String sql = "insert into member(member_id, money) values (?, ?)";
 
@@ -67,14 +68,14 @@ public class MemberRepositoryV3 implements MemberRepositoryEx{
             return member;
 
         } catch (SQLException e) {
-            log.error("DB SQL ERROR: ", e);
-            throw e;
+            // 변경되는 부분 - Runtime Exception 으로 바꿔준다
+            throw new MyDbException(e);
         } finally {
             close(con, pstmt, null);
         }
     }
 
-    public Member findById(String memberId) throws SQLException {
+    public Member findById(String memberId) {
 
         String sql = "select * from member where member_id = ? ";
 
@@ -102,8 +103,8 @@ public class MemberRepositoryV3 implements MemberRepositoryEx{
             }
 
         } catch (SQLException e) {
-            log.error("db ERROR:: ", e);
-            throw e;
+            // 변경되는 부분 - Runtime Exception 으로 바꿔준다
+            throw new MyDbException(e);
         } finally {
             // CLOSE 도 원래대로 되돌리면 됨. Close 방식도 바뀜
             close(con, pstmt, rs);
@@ -111,7 +112,7 @@ public class MemberRepositoryV3 implements MemberRepositoryEx{
     }
 
 
-    public void update(String memberId, int updateMoney) throws SQLException {
+    public void update(String memberId, int updateMoney) {
 
         String sql = "update member set money = ? where member_id = ?";
 
@@ -128,8 +129,8 @@ public class MemberRepositoryV3 implements MemberRepositoryEx{
             int effectedRow = pstmt.executeUpdate(); // 영향 받은 row 수를 반환 : 1이면 성공이라 볼 수 있음
 
         } catch (SQLException e) {
-            log.info("DB ERROR :: ", e);
-            throw e;
+            // 변경되는 부분 - Runtime Exception 으로 바꿔준다
+            throw new MyDbException(e);
 
         } finally {
             close(con, pstmt, null);
@@ -138,7 +139,7 @@ public class MemberRepositoryV3 implements MemberRepositoryEx{
 
 
     // 삭제
-    public void delete(String memberId) throws SQLException {
+    public void delete(String memberId) {
 
         String sql = "delete from member where member_id = ?";
 
@@ -154,8 +155,8 @@ public class MemberRepositoryV3 implements MemberRepositoryEx{
             int effectedRow = pstmt.executeUpdate(); // 역시 1을 반환
 
         } catch (SQLException e) {
-            log.info("DB ERROR :: ", e);
-            throw e;
+            // 변경되는 부분 - Runtime Exception 으로 바꿔준다
+            throw new MyDbException(e);
         } finally {
             close(con, pstmt, null);
         }
